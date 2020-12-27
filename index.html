@@ -1,0 +1,151 @@
+<html>
+
+	<head>
+		<title>Smile Detect</title>
+		<script src='AI.js'></script>
+		<script src='file.js'></script>
+		<style>
+			body {
+				background-color: black;
+			}
+
+			canvas {
+				background-color: white;
+			}
+		</style>
+	</head>
+
+	<body>
+		<canvas width='300' height='300' id='cnv' onmousedown="on_mouse_down(event)" onmouseup="on_mouse_up(event)" onmousemove="on_mouse_move(event)"></canvas>
+		<button onclick="happy()">веселый</button>
+		<button onclick="sad()">грустный</button>
+		<button onclick="tr()">обучить</button>
+		<button onclick="r()">запуск</button>
+		<button onclick="save()">сохранить</button>
+		<button onclick="load()">загрузить</button>
+		<script type="text/javascript">
+			var cnv = document.getElementById('cnv');
+			var ctx = cnv.getContext('2d');
+
+			var w = 15;
+			var h = 15;
+
+			var cw = cnv.width / w;
+			var ch = cnv.width / h;
+
+			var is_mouse_down = false;
+
+			var image = [];
+
+			var h_s = 0;
+			var s_s = 0;
+
+			var cl = false;
+
+			for (let i = 0; i < w * h; i++) {
+				image.push(0);
+			}
+
+			function rast(x, y) {
+				return [Math.max(0, Math.round(x / cw)), Math.max(0, Math.round(y / ch))];
+			}
+
+			function on_mouse_down(e) {
+				is_mouse_down = true;
+				let pos = rast(e.pageX - cw, e.pageY - ch);
+
+				cl = image[pos[1] * w + pos[0]];
+
+				if (cl)
+					image[pos[1] * w + pos[0]] = 0;
+				else
+					image[pos[1] * w + pos[0]] = 1;
+
+				draw();
+			}
+
+			function on_mouse_up(e) {
+				is_mouse_down = false;
+			}
+
+			function on_mouse_move(e) {
+				if (is_mouse_down) {
+					let pos = rast(e.pageX - cw, e.pageY - ch);
+					if (cl)
+						image[pos[1] * w + pos[0]] = 0;
+					else
+						image[pos[1] * w + pos[0]] = 1;
+				}
+
+				draw();
+			}
+
+			function draw() {
+				ctx.clearRect(0, 0, cnv.width, cnv.height);
+
+				for (let i = 0; i < h; i++) {
+					for (let j = 0; j < w; j++) {
+						if (image[i*w+j] == 1) {
+							ctx.fillRect(j * cw, i * ch, cw, ch)
+						}
+					}
+				}
+			}
+
+
+			let n = new NeuralNetwork([w*h, 10, 5, 1]);
+
+		    var learning_data = []; 
+
+			function happy() {
+				let d = [image, [1]];
+				learning_data.push(d);
+
+				image = [];
+
+				for (let i = 0; i < w * h; i++) {
+					image.push(0);
+				}
+
+				h_s++;
+
+				console.log('веселых: ' + h_s + ", грустных: " + s_s);
+
+				draw();
+			}
+
+			function sad() {
+				let d = [image, [0]];
+				learning_data.push(d);
+
+				image = [];
+
+				for (let i = 0; i < w * h; i++) {
+					image.push(0);
+				}
+
+				s_s++;
+
+				console.log('веселых: ' + h_s + ", грустных: " + s_s);
+
+				draw();
+			}
+
+			function tr() {
+				n.learn(learning_data);
+			}
+
+			function r() {
+				let res = n.run(image);
+				alert(res > 0.5 ? 'веселый' : 'грустный');
+
+				for (let i = 0; i < w * h; i++) {
+					image[i] = 0;
+				}
+
+				draw();
+			}
+		</script>
+	</body>
+
+</html>
