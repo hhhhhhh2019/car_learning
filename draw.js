@@ -2,8 +2,9 @@ var cnv = document.getElementById('cnv');
 var ctx = cnv.getContext('2d');
 
 
-function line(x0, y0, x1, y1, c) {
-	ctx.strokeColor = c;
+function line(x0, y0, x1, y1, c, w=2) {
+	ctx.lineWidth = w;
+	ctx.strokeStyle = c;
 	ctx.beginPath();
 	ctx.moveTo(x0, y0);
 	ctx.lineTo(x1, y1);

@@ -74,7 +74,7 @@ function _learn(lays, weights, ld, iters, koof, log) {
 
 	for (let k = 0; k < iters; k++) {
 		for (let d of ld) {
-			run(lays, weights, d[0]);
+			_run(lays, weights, d[0]);
 
 			find_out_error(lays[lays.length-1], d[1]);
 			for (let i = lays.length-1; i > 1; i--) {
@@ -139,7 +139,7 @@ class NeuralNetwork {
 		for (let i = 0; i < this.weights.length; i++) {
 			for (let j = 0; j < this.weights[i].length; j++) {
 				for (let k = 0; k < this.weights[i][j].length; k++) {
-					this.weights[i][j][k] = p.weights[i][j][k] + Math.random() - 0.5;
+					this.weights[i][j][k] = p.weights[i][j][k] + (Math.random()-0.5)/3;
 				}
 			}
 		}

@@ -10,15 +10,32 @@
 
 			#cnv {
 				background-color: white;
+				width: 100%;
+			}
+			
+			p {
+				color: white;
 			}
 		</style>
 	</head>
 	<body>
-		<canvas id='cnv' width='512' height='360'></canvas>
+		<canvas id='cnv' width='512' height='360' onclick="r_draw()"></canvas>
+		<button onclick="ch_map()">следующая карта</button>
+		<button onclick="generate_cars()">перегенерировать</button>
+		<button onclick="create_new_popul()">новое поколение</button>
+		<p id="fps">fps: 0</p>
 		<script src='draw.js'></script>
 		<script type="text/javascript">
+			let rd = false;
+			let fpst = document.getElementById("fps");
+			
 			function radians(a) {
 				return a * Math.PI / 180; 
+			}
+			
+			function norm(a) {
+				let s = distance([0, 0], a);
+				return [a[0] / s, a[1] / s];
 			}
 
 			function cast(o, d, w) {
@@ -69,13 +86,24 @@
 		                    || ((ax2 == bx2) && (ay2 == by2))
 		               ));
 			}
+			
+			function rot(v, a) {
+				let res = [0, 0];
+				res[0] = v[0] * Math.cos(a) + v[1] * -Math.sin(a);
+				res[1] = v[0] * Math.sin(a) + v[1] * Math.cos(a);
+				return res;
+			}
+			
+			var colors = [
+				"gray", "red", "green", "blue", "orange", "brown"
+			]
 
 			class Car {
 				constructor(w, h, c, x, y) {
 					this.points = [[-w/2, -h/2], [w/2, -h/2], [w/2, h/2], [-w/2, h/2]];
 					this.color = c;
-					this.rc = 20;
-					this.n = new NeuralNetwork([this.rc, 60, 80, 2]);
+					this.rc = 60;
+					this.n = new NeuralNetwork([this.rc, 10, 2]);
 					this.a = 0;
 					this.w = w;
 					this.h = h;
@@ -83,32 +111,34 @@
 					this.y = h/2 + y;
 
 					this.score = 0;
+					this.alive = true;
 				}
 
 				think(m) {
 					let res = this.n.run(this.trayce(m));
-					this.move(Math.max(0.1, res[0]));
-					if (res[1] > 0.51) this.rotate(0.5);
-					if (res[1] < 0.49) this.rotate(-0.5);
+					this.move(Math.max(0.2, res[0]));
+					if (res[1] > 0.51) this.rotate(0.01/(1-res[1])*res[0]/3);
+					if (res[1] < 0.49) this.rotate(-0.01/res[1]*res[0]/3);
 				}
 
 				trayce(map) {
 					let scene = [];
 		
-					for (let r = Math.floor(-this.rc/2); r < Math.floor(this.rc/2); r++) {
+					for (let r = -this.rc/2; r < this.rc/2; r++) {
 						let closest = null;
 						let record = Infinity;
 						
-						for (let w of map) {
-							let d = [0, 1];
-
+						let d = rot(norm([0, 1]), this.a+r/14.5);
+						
+						for (let i = 1; i < map.length; i++) {
+						  let w = map[i];
 							let pt = cast([this.x, this.y], d, w);
 							
 							if (pt) {
 								let p = [this.x, this.y];
 								let d = distance(pt, p);
 								
-								if (d > 100) {
+								if (d <= 100) {
 									if (d < record) {
 										record = d;
 										closest = pt;
@@ -119,18 +149,25 @@
 							}
 						}
 						
-						scene[r] = record < 100 ? 100 - record : 0;
+						if (!closest && rd) {
+						  line(this.x, this.y, this.x + d[0]*100, this.y + d[1]*100, "black", 0.5)
+						}
+						
+						if (closest && rd) {
+							line(this.x, this.y, closest[0], closest[1], "black", 0.5);
+						}
+						
+						scene[r] = record <= 100 ? (100 - record)**2 : 0;
 					}
 
 					return scene;
 				}
 
 				move(s) {
-					let dir = [0, 1];
-					dir[0] = dir[0] * Math.cos(radians(this.a)) + dir[1] * Math.sin(-radians(this.a));
-					dir[1] = dir[0] * Math.sin(radians(this.a)) + dir[1] * Math.cos(radians(this.a));
-					this.x += dir[0] * -s;
-					this.y += dir[1] * -s;
+					let dir = rot([0, 1], this.a);
+					this.x += dir[0] * s;
+					this.y += dir[1] * s;
+					this.score += s;
 				}
 
 				rotate(a) {
@@ -139,11 +176,10 @@
 						else a = 5
 					}
 					this.a += a;
-					this.a = this.a % 360;
+					this.a = this.a % (Math.PI*2);
 					let points = [[-this.w/2, -this.h/2], [this.w/2, -this.h/2], [this.w/2, this.h/2], [-this.w/2, this.h/2]];
 					for (let i = 0; i < this.points.length; i++) {
-						this.points[i][0] = points[i][0] * Math.cos(radians(this.a)) + points[i][1] * Math.sin(-radians(this.a));
-						this.points[i][1] = points[i][0] * Math.sin(radians(this.a)) + points[i][1] * Math.cos(radians(this.a));
+						this.points[i] = rot(points[i], this.a);
 					}
 				}
 
@@ -157,7 +193,9 @@
 				}
 
 				collide(map) {
-					for (let w of map) {
+				
+					for (let i = 1; i < map.length; i++) {
+					  let w = map[i];
 						let p = this.points;
 						if (inter(w[0][0], w[0][1], w[1][0], w[1][1],
 								p[0][0]+this.x, p[0][1]+this.y, p[1][0]+this.x, p[1][1]+this.y))
@@ -179,102 +217,155 @@
 
  			var run = true;
  			var cars = [];
- 			var dead_cars = [];
- 			var map = [
- 				[[50, 30], [200, 40]],
- 				[[50, 30], [30, 100]],
- 				[[30, 100], [80, 200]],
- 				[[80, 200], [70, 300]],
- 				[[70, 300], [90, 310]],
- 				[[90, 310], [200, 300]],
- 				[[200, 300], [400, 310]],
- 				[[400, 310], [420, 150]],
- 				[[420, 150], [400, 70]],
- 				[[400, 70], [200, 40]],
+ 			var maps = [[
+	 			[380, 150],
+				[[50, 30], [200, 40]],
+				[[50, 30], [30, 100]],
+				[[30, 100], [80, 200]],
+				[[80, 200], [70, 300]],
+				[[70, 300], [90, 310]],
+				[[90, 310], [200, 300]],
+				[[200, 300], [400, 310]],
+				[[400, 310], [420, 150]],
+				[[420, 150], [400, 70]],
+				[[400, 70], [200, 40]],
+	
+				[[350, 120], [200, 90]],
+				[[200, 90], [90, 80]],
+				[[90, 80], [90, 110]],
+				[[90, 110], [135, 180]],
+				[[135, 180], [125, 260]],
+				[[125, 260], [190, 255]],
+				[[190, 255], [350, 260]],
+				[[350, 260], [365, 140]],
+				[[365, 140], [350, 120]]
+ 			],
+ 			[
+	 			[420, 120],
+	 			[[10, 20], [150, 25]],
+	 			[[150, 25], [490, 15]],
+	 			[[490, 15], [470, 70]],
+	 			[[470, 70], [450, 100]],
+	 			[[450, 100], [455, 300]],
+	 			[[455, 300], [445, 310]],
+	 			[[445, 310], [370, 300]],
+	 			[[370, 300], [360, 280]],
+	 			[[360, 280], [350, 230]],
+	 			[[350, 230], [280, 215]],
+	 			[[280, 215], [275, 300]],
+	 			[[275, 300], [80, 280]],
+	 			[[80, 280], [90, 150]],
+	 			[[90, 150], [10, 20]],
+	 			
+	 			[[90, 65], [150, 70]],
+	 			[[150, 70], [420, 65]],
+	 			[[420, 65], [400, 90]],
+	 			[[400, 90], [405, 220]],
+	 			[[404, 190], [240, 170]],
+	 			[[240, 170], [230, 250]],
+	 			[[230, 250], [135, 240]],
+	 			[[135, 240], [140, 140]],
+	 			[[140, 140], [90, 65]]
+ 			]]
 
- 				[[350, 120], [200, 90]],
- 				[[200, 90], [90, 80]],
- 				[[90, 80], [90, 110]],
- 				[[90, 110], [135, 180]],
- 				[[135, 180], [125, 260]],
- 				[[125, 260], [190, 255]],
- 				[[190, 255], [350, 260]],
- 				[[350, 260], [365, 140]],
- 				[[365, 140], [350, 120]]
- 			]
+ 			var c_w = 10;
+ 			var c_h = 20;
 
- 			var c_w = 20;
- 			var c_h = 40;
-
- 			let speed = 1000/60;
+ 			let speed = 0;
+ 			
+ 			let map = 0;
 
  			function generate_cars(bc) {
  				cars = [];
 
- 				for (let i = 0; i < 50; i++) { 
-	 				let c = new Car(c_w, c_h, 'gray', 380, 150);
+ 				for (let i = 0; i < 25; i++) { 
+	 				let c = new Car(c_w, c_h, colors[Math.floor(Math.random()*colors.length)], maps[map][0][0], maps[map][0][1]);
 
 	 				if (bc) {
-	 					c.n.evolution(bc[Math.floor(Math.random()*bc.length)].n);
+	 					c.n.evolution(bc[Math.round(Math.random()*(bc.length-1))].n);
 	 				}
 
 	 				cars.push(c);
  				}
+ 				
+ 				frames = 0;
+ 				lframes = 0;
  			}
 
- 			let time = 0;
+ 			let frames = 0;
+ 			let lframes = 0;
+ 			
+ 			let fps = 0;
+ 			
+ 			function fpsc() {
+	 			fps = frames-lframes;
+	 			lframes=frames;
+	 			fpst.innerHTML = "fps: " + fps;
+	 			setTimeout(fpsc, 1000);
+ 			}
 
  			function update() {
  				clear();
 
  				let lc = null;
 
- 				for (let c = 0; c < cars.length; c++) {
- 					cars[c].think(map);
- 					cars[c].draw();
- 					cars[c].score++;
- 					if (cars[c] == lc) {run = false; return}
- 					lc = cars[c];
- 					if (cars[c].collide(map)) {
- 						dead_cars.push(cars[c]);
- 						cars.splice(c, 1)
+ 				for (let c of cars) {
+	 				if (c.alive) {
+	 					c.think(maps[map]);
+	 					c.alive = !c.collide(maps[map]);
+			 			c.draw();
+			 			lc++;
  					}
  				}
 
- 				for (let i of map) {
- 					line(i[0][0], i[0][1], i[1][0], i[1][1], 'brown');
+ 				for (let i = 1; i < maps[map].length; i++) {
+ 					line(maps[map][i][0][0], maps[map][i][0][1], maps[map][i][1][0], maps[map][i][1][1], 'black', 0.5);
  				}
 
- 				time++;
+ 				frames++;
 
- 				if (cars.length < 1 || time > 1000) {
+ 				if (lc < 1 || frames > 10000) {
+	 				frames = 0;
+	 				lframes = 0;
  					run = false;
  					create_new_popul();
  					return;
  				}
 
  				if (run)
- 					setTimeout(update, speed);
+ 					//requestAnimationFrame(update);
+ 					setTimeout(update, 0);
  			}
 
  			function create_new_popul() {
- 				let best = [dead_cars[0], dead_cars[1], dead_cars[2], dead_cars[3]];
+ 				let best = [cars[0], cars[1], cars[2], cars[3]];
 
- 				for (let i = best.length-1; i < dead_cars; i++) {
+ 				for (let i = best.length-1; i < cars; i++) {
  					for (let j = 0; j < best.length; j++) {
- 						if (best[j].score < dead_cars[i].score) best[j] = dead_cars[i];
+ 						if (best[j].score < cars[i].score) best[j] = cars[i];
  					}
  				}
-
- 				dead_cars = [];
-
  				generate_cars(best);
  				run = true;
  				update();
  			}
+ 			
+ 			function r_draw() {
+	 			rd = !rd;
+ 			}
+ 			
+ 			function ch_map() {
+ 			  map++;
+ 			  map = map % maps.length;
+ 			  frames = 0;
+ 			  lframes = 0;
+ 			  create_new_popul();
+ 			}
 
  			generate_cars();
  			update();
+ 			
+ 			fpsc();
 		</script>
 	</body>
 </html>
