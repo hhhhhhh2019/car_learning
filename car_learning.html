@@ -20,14 +20,21 @@
 	</head>
 	<body>
 		<canvas id='cnv' width='512' height='360' onclick="r_draw()"></canvas>
-		<button onclick="ch_map()">следующая карта</button>
+		<button onclick="cm = true; restart()">следующая карта</button>
 		<button onclick="generate_cars()">перегенерировать</button>
-		<button onclick="create_new_popul()">новое поколение</button>
+		<button onclick="restart()">новое поколение</button>
+		<button onclick="cont_fr = !cont_fr">пропуск</button>
 		<p id="fps">fps: 0</p>
+		<p id="p">поколение: 0</p>
+		<p id="l">живых: 0</p>
 		<script src='draw.js'></script>
 		<script type="text/javascript">
+			let	cont_fr = false;
+			let cm = false;
 			let rd = false;
 			let fpst = document.getElementById("fps");
+			let p = document.getElementById("p");
+			let alives = document.getElementById("l");
 			
 			function radians(a) {
 				return a * Math.PI / 180; 
@@ -102,7 +109,7 @@
 				constructor(w, h, c, x, y) {
 					this.points = [[-w/2, -h/2], [w/2, -h/2], [w/2, h/2], [-w/2, h/2]];
 					this.color = c;
-					this.rc = 60;
+					this.rc = 20;
 					this.n = new NeuralNetwork([this.rc, 10, 2]);
 					this.a = 0;
 					this.w = w;
@@ -128,7 +135,7 @@
 						let closest = null;
 						let record = Infinity;
 						
-						let d = rot(norm([0, 1]), this.a+r/14.5);
+						let d = rot(norm([0, 1]), this.a+r/5);
 						
 						for (let i = 1; i < map.length; i++) {
 						  let w = map[i];
@@ -167,7 +174,7 @@
 					let dir = rot([0, 1], this.a);
 					this.x += dir[0] * s;
 					this.y += dir[1] * s;
-					this.score += s;
+					this.score += s*s;
 				}
 
 				rotate(a) {
@@ -214,6 +221,8 @@
 					return false;
 				}
  			}
+ 			
+ 			var pop = 0;
 
  			var run = true;
  			var cars = [];
@@ -251,8 +260,8 @@
 	 			[[445, 310], [370, 300]],
 	 			[[370, 300], [360, 280]],
 	 			[[360, 280], [350, 230]],
-	 			[[350, 230], [280, 215]],
-	 			[[280, 215], [275, 300]],
+	 			[[350, 230], [280, 235]],
+	 			[[280, 235], [275, 300]],
 	 			[[275, 300], [80, 280]],
 	 			[[80, 280], [90, 150]],
 	 			[[90, 150], [10, 20]],
@@ -261,9 +270,9 @@
 	 			[[150, 70], [420, 65]],
 	 			[[420, 65], [400, 90]],
 	 			[[400, 90], [405, 220]],
-	 			[[404, 190], [240, 170]],
-	 			[[240, 170], [230, 250]],
-	 			[[230, 250], [135, 240]],
+	 			[[404, 190], [220, 170]],
+	 			[[220, 170], [210, 250]],
+	 			[[210, 250], [135, 240]],
 	 			[[135, 240], [140, 140]],
 	 			[[140, 140], [90, 65]]
  			]]
@@ -277,8 +286,10 @@
 
  			function generate_cars(bc) {
  				cars = [];
+ 				
+ 				if (!bc) pop = 0;
 
- 				for (let i = 0; i < 25; i++) { 
+ 				for (let i = 0; i < 50; i++) { 
 	 				let c = new Car(c_w, c_h, colors[Math.floor(Math.random()*colors.length)], maps[map][0][0], maps[map][0][1]);
 
 	 				if (bc) {
@@ -287,6 +298,9 @@
 
 	 				cars.push(c);
  				}
+
+ 				pop++;
+ 				p.innerHTML = "поколение: " + (pop);
  				
  				frames = 0;
  				lframes = 0;
@@ -308,33 +322,50 @@
  				clear();
 
  				let lc = null;
+ 				let ms = 0;
 
  				for (let c of cars) {
 	 				if (c.alive) {
 	 					c.think(maps[map]);
-	 					c.alive = !c.collide(maps[map]);
-			 			c.draw();
+	 					c.alive = !c.collide(maps[map])
+				 		//c.draw();
 			 			lc++;
+			 			ms = Math.max(ms, c.score);
  					}
+ 					c.draw();
  				}
-
+				
  				for (let i = 1; i < maps[map].length; i++) {
  					line(maps[map][i][0][0], maps[map][i][0][1], maps[map][i][1][0], maps[map][i][1][1], 'black', 0.5);
  				}
 
  				frames++;
+ 				
+ 				alives.innerHTML = "живых: " + lc;
 
- 				if (lc < 1 || frames > 10000) {
+ 				if (lc < 1 || frames > 50000) {
 	 				frames = 0;
 	 				lframes = 0;
  					run = false;
  					create_new_popul();
  					return;
  				}
+ 				
+ 				if (cm) {
+	 				cm = false;
+	 				run = false;
+	 				ch_map();
+	 				return;
+ 				}
 
- 				if (run)
+ 				if (run) {
  					//requestAnimationFrame(update);
- 					setTimeout(update, 0);
+ 					//setTimeout(update, 0);
+ 					if (cont_fr && ms <= 100 && frames % 500 > 0 && frames > 1)
+		 				update();
+		 			else
+				 		requestAnimationFrame(update);
+	 			}
  			}
 
  			function create_new_popul() {
@@ -345,6 +376,7 @@
  						if (best[j].score < cars[i].score) best[j] = cars[i];
  					}
  				}
+ 				
  				generate_cars(best);
  				run = true;
  				update();
@@ -361,9 +393,17 @@
  			  lframes = 0;
  			  create_new_popul();
  			}
+ 			
+ 			function restart() {
+	 			for (let i of cars) {
+		 			i.alive = false;
+	 			}
+ 			}
 
  			generate_cars();
  			update();
+ 			
+ 			//p.innerHTML = "поколение: " + (pop+);
  			
  			fpsc();
 		</script>
